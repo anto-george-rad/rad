@@ -1,0 +1,79 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: crm
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-crm}
+      POSTGRES_DB: raidefend
+      TZ: Asia/Dubai
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crm -d raidefend"]
+      interval: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    volumes:
+      - uploads:/data/uploads
+    environment:
+      DATABASE_URL: postgres://crm:${DB_PASSWORD:-crm}@db:5432/raidefend
+      AUTH_SECRET: ${AUTH_SECRET:?Set AUTH_SECRET in .env (openssl rand -base64 48)}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@raidefend.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-ChangeMe123!}
+      ADMIN_NAME: ${ADMIN_NAME:-Admin}
+      SEED_SAMPLE_DATA: ${SEED_SAMPLE_DATA:-true}
+      APP_URL: ${APP_URL:-http://localhost:3000}
+      APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Dubai}
+      TZ: ${APP_TIMEZONE:-Asia/Dubai}
+      CRON_SECRET: ${CRON_SECRET:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-5-5}
+      # Remove this line once the app is served over HTTPS
+      INSECURE_COOKIES: ${INSECURE_COOKIES:-true}
+
+  # Daily database backup at 02:00 company time into ./backups, keeping the last 14 days.
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${DB_PASSWORD:-crm}
+      TZ: ${APP_TIMEZONE:-Asia/Dubai}
+      KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+    volumes:
+      - ./backups:/backups
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "Backups go to ./backups (kept $$KEEP_DAYS days)."
+        while true; do
+          now=$$(date +%H%M)
+          if [ "$$now" = "0200" ] || [ ! -f /backups/.first ]; then
+            f=/backups/raidefend-$$(date +%F-%H%M).sql.gz
+            if pg_dump -h db -U crm raidefend | gzip > "$$f.tmp"; then mv "$$f.tmp" "$$f"; touch /backups/.first; echo "Backup written: $$f"; else rm -f "$$f.tmp"; echo "Backup FAILED"; fi
+            find /backups -name 'raidefend-*.sql.gz' -mtime +$$KEEP_DAYS -delete
+            sleep 61
+          fi
+          sleep 30
+        done
+
+volumes:
+  pgdata:
+  uploads:

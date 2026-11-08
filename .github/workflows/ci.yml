@@ -1,0 +1,31 @@
+name: CI
+on:
+  push:
+  pull_request:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: { POSTGRES_USER: crm, POSTGRES_PASSWORD: crm, POSTGRES_DB: raidefend }
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U crm -d raidefend" --health-interval 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://crm:crm@localhost:5432/raidefend
+      AUTH_SECRET: ci-only-secret-that-is-long-enough-1234567890
+      SEED_SAMPLE_DATA: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
+      - name: Type check
+        run: npx tsc --noEmit
+      - name: Unit tests
+        run: npm test
+      - name: Migrations and seed apply cleanly
+        run: npm run setup
+      - name: Production build
+        run: npm run build

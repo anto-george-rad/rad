@@ -1,0 +1,14 @@
+{
+  "name": "RAD Workspace",
+  "short_name": "RAD",
+  "description": "Raidefend CRM and helpdesk",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0E1122",
+  "theme_color": "#2B3BD6",
+  "icons": [
+    { "src": "/app-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/app-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
